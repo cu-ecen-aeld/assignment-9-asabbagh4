@@ -1,173 +1,25 @@
 #!/bin/sh
 
-# Define module and device names
-scullModuleName="scull"
-scullDeviceName="scull"
-
-faultyModuleName="faulty"
-faultyDeviceName="faulty"
-
-helloModuleName="hello"
-helloDeviceName="hello"
-
-# Define mode
-accessMode="664"
-
-# Function to load scull device
-initializeScullDevice() {
-    # Check if the major number is provided
-    if [ $# -ne 1 ]; then 
-        echo "Major number required!"
+case "$1" in
+    start)
+        echo "Executing module_load and scull_load scripts"
+        /usr/bin/module_load faulty
+        /usr/bin/scull_load
+        modprobe hello
+        echo "Starting aesdchar driver"
+        aesdchar_load
+        ;;
+    stop)
+        echo "Stopping module_load and scull_load scripts"
+        /usr/bin/module_unload faulty
+        /usr/bin/scull_unload
+        rmmod hello
+        echo "Stopping aesdchar driver"
+        aesdchar_unload
+        ;;
+      *)
+        echo "Usage: $0 {start|stop}"
         exit 1
-    fi
-
-    majorNumber=$1
-
-    # Remove stale nodes and replace them, then give gid and perms
-    # Usually the script is shorter, it's scull that has several devices in it.
-
-    # Remove old device nodes
-    rm -f /dev/${scullDeviceName}[0-3]
-
-    # Create new device nodes
-    mknod /dev/${scullDeviceName}0 c $majorNumber 0
-    mknod /dev/${scullDeviceName}1 c $majorNumber 1
-    mknod /dev/${scullDeviceName}2 c $majorNumber 2
-    mknod /dev/${scullDeviceName}3 c $majorNumber 3
-
-    # Create a symbolic link to the first device node
-    ln -sf ${scullDeviceName}0 /dev/${scullDeviceName}
-
-    # Set the access permissions for the device nodes
-    chmod $accessMode  /dev/${scullDeviceName}[0-3]
-
-    # Repeat the above steps for the pipe, single, uid, wuid, and priv devices
-
-    rm -f /dev/${scullDeviceName}pipe[0-3]
-    mknod /dev/${scullDeviceName}pipe0 c $majorNumber 4
-    mknod /dev/${scullDeviceName}pipe1 c $majorNumber 5
-    mknod /dev/${scullDeviceName}pipe2 c $majorNumber 6
-    mknod /dev/${scullDeviceName}pipe3 c $majorNumber 7
-    ln -sf ${scullDeviceName}pipe0 /dev/${scullDeviceName}pipe
-    chmod $accessMode  /dev/${scullDeviceName}pipe[0-3]
-
-    rm -f /dev/${scullDeviceName}single
-    mknod /dev/${scullDeviceName}single  c $majorNumber 8
-    chmod $accessMode  /dev/${scullDeviceName}single
-
-    rm -f /dev/${scullDeviceName}uid
-    mknod /dev/${scullDeviceName}uid   c $majorNumber 9
-    chmod $accessMode  /dev/${scullDeviceName}uid
-
-    rm -f /dev/${scullDeviceName}wuid
-    mknod /dev/${scullDeviceName}wuid  c $majorNumber 10
-    chmod $accessMode  /dev/${scullDeviceName}wuid
-
-    rm -f /dev/${scullDeviceName}priv
-    mknod /dev/${scullDeviceName}priv  c $majorNumber 11
-    chmod $accessMode  /dev/${scullDeviceName}priv
-
-    echo "module: $scullModuleName loaded."
-}
-
-# Function to unload scull device
-deinitializeScullDevice() {
-    # Remove the scull module
-    rmmod $scullDeviceName $* || exit 1
-
-    # Remove stale nodes
-    rm -f /dev/${scullDeviceName} /dev/${scullDeviceName}[0-3] 
-    rm -f /dev/${scullDeviceName}priv
-    rm -f /dev/${scullDeviceName}pipe /dev/${scullDeviceName}pipe[0-3]
-    rm -f /dev/${scullDeviceName}single
-    rm -f /dev/${scullDeviceName}uid
-    rm -f /dev/${scullDeviceName}wuid
-}
-
-# Function to load faulty device
-initializeFaultyDevice() {
-    # Check if the major number is provided
-    if [ $# -ne 1 ]; then 
-        echo "Major number required!"
-        exit 1
-    fi
-
-    majorNumber=$1
-
-    # Remove any existing /dev node for /dev/${faultyDeviceName}
-    rm -f /dev/${faultyDeviceName}
-
-    # Add a node for our device at /dev/${faultyDeviceName} using mknod
-    mknod /dev/${faultyDeviceName} c $majorNumber 0
-
-    # Change access mode to ${accessMode}
-    chmod $accessMode  /dev/${faultyDeviceName}
-
-    echo "module: $faultyModuleName loaded."
-}
-
-# Function to unload faulty device
-deinitializeFaultyDevice() {
-    # Remove the faulty module
-    rmmod $faultyModuleName || exit 1
-
-    # Remove stale nodes
-    rm -f /dev/${faultyDeviceName}
-}
-
-# Main script
-if [ $# -ne 1 ]; then
-    echo "Wrong number of parameters"
-    exit 1
-fi
-
-case $1 in
-"start")
-    echo "Running load ldd drivers daemon"
-
-    # Load scull module, exit on failure
-    insmod /lib/modules/$(uname -r)/extra/$scullModuleName.ko $* || exit 1
-
-    # Get the major number (allocated with allocate_chrdev_region) from /proc/devices
-    majorNumber=$(awk "\$2==\"$scullModuleName\" {print \$1}" /proc/devices)
-    echo "scull major number is: ${majorNumber}"
-
-    # load scull device
-    initializeScullDevice "$majorNumber"
-
-    # Load faulty module, exit on failure
-    insmod /lib/modules/$(uname -r)/extra/$faultyModuleName.ko $* || exit 1
-
-    # Get the major number (allocated with allocate_chrdev_region) from /proc/devices
-    majorNumber=$(awk "\$2==\"$faultyModuleName\" {print \$1}" /proc/devices)
-    echo "faulty major number is: ${majorNumber}"
-
-    # load faulty device
-    initializeFaultyDevice "$majorNumber"
-
-    # basic modprobe of hello driver
-    cd /lib/modules/$(uname -r)/extra/
-    modprobe $helloModuleName.ko $* || exit 1
-    aesdchar_load
-
-    ;;
-"stop")
-    echo "Stopping load ldd drivers daemon"
-
-    # unload scull device
-    deinitializeScullDevice "$majorNumber"
-
-    # unload faulty device
-    deinitializeFaultyDevice
-    
-    # basic rmmod of hello driver
-    rmmod /lib/modules/$(uname -r)/extra/$helloModuleName.ko || exit 1
-    aesdchar_unload
-    ;;
-*)
-    echo "Invalid option \"$1\""
-    exit 2
-    ;;
 esac
 
 exit 0
