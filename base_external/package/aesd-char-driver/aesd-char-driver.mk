@@ -5,7 +5,7 @@
 #
 ##############################################################
 
-AESD_CHAR_DRIVER_VERSION = '57a7480db9be60921be92af2c9252ed8e8da559b'
+AESD_CHAR_DRIVER_VERSION = '65595de636d20af68beb55ce504238edda96c0d7'
 
 AESD_CHAR_DRIVER_SITE = 'git@github.com:cu-ecen-aeld/assignments-3-and-later-asabbagh4.git'
 AESD_CHAR_DRIVER_SITE_METHOD = git
